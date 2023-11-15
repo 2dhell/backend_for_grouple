@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ noServer: true });
+const wss = new WebSocket.Server({ server });
 
 const users = new Map();
 
@@ -25,12 +25,10 @@ app.use(express.static('public'));
 // Make sure to configure your server with an SSL certificate.
 // const wss = new WebSocket.Server({ server });
 
-server.on('upgrade', (request, socket, head) => {
-  wss.handleUpgrade(request, socket, head, (ws) => {
-    wss.emit('connection', ws, request);
-  });
-});
-
+wss.on('connection', (ws) => {
+  // Assign a unique user ID
+  const userId = generateUserId();
+  users.set(userId, ws);
 
   // Send the user ID to the client
   ws.send(JSON.stringify({ type: 'user-id', userId }));
@@ -69,7 +67,7 @@ function handleMatchRequest(userId) {
     const usersToConnect = [userId, matchedUserId];
     usersToConnect.forEach((user) => {
       const userSocket = users.get(user);
-      if (userSocket) {
+      if (userSocket && userSocket.readyState === WebSocket.OPEN) {
         userSocket.send(JSON.stringify({ type: 'match-found', users: usersToConnect }));
       }
     });
@@ -88,7 +86,7 @@ function handleWebRTCMessage(senderId, data) {
   if (receiverId) {
     const receiverSocket = users.get(receiverId);
 
-    if (receiverSocket) {
+    if (receiverSocket && receiverSocket.readyState === WebSocket.OPEN) {
       receiverSocket.send(JSON.stringify({
         type: data.type,
         senderId: senderId,
@@ -115,11 +113,19 @@ function generateUserId() {
   return Math.random().toString(36).substring(2, 15);
 }
 
-
+// 4. Environment Variable for WebSocket URL
+// Set the WEBSOCKET_URL environment variable before starting the server.
+// Example: WEBSOCKET_URL=wss://your-deployed-server.com node your-server-file.js
+const socket = new WebSocket(process.env.WEBSOCKET_URL || 'ws://localhost:3000');
 
 // Additional route (optional)
 app.get('/', (req, res) => {
   res.send('Hello, World!');
+});
+
+// Close WebSocket connection on page unload
+window.addEventListener('beforeunload', () => {
+  socket.close();
 });
 
 const PORT = process.env.PORT || 3000;
@@ -127,5 +133,3 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
-
-
