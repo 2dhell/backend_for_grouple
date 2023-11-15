@@ -116,7 +116,7 @@ function generateUserId() {
 // 4. Environment Variable for WebSocket URL
 // Set the WEBSOCKET_URL environment variable before starting the server.
 // Example: WEBSOCKET_URL=wss://your-deployed-server.com node your-server-file.js
-const socket = new WebSocket(process.env.WEBSOCKET_URL || 'ws://localhost:3000');
+const socket = new WebSocket(process.env.WEBSOCKET_URL || 'wss://localhost:3000');
 
 // Additional route (optional)
 app.get('/', (req, res) => {
