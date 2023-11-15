@@ -1,44 +1,36 @@
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
+const WebSocket = require('ws');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const wss = new WebSocket.Server({ server });
 
 const users = new Map();
 
-// Error Handling for Socket.io and Server
-io.on('error', (error) => {
-  console.error('Socket.io server error:', error);
-});
-
-server.on('error', (error) => {
-  console.error('Server error:', error);
-});
-
-// Serve static files from a 'public' directory (optional)
+// Serve static files from the "public" directory
 app.use(express.static('public'));
 
-io.on('connection', (socket) => {
-  // Assign a unique user ID
+wss.on('connection', (ws) => {
   const userId = generateUserId();
-  users.set(userId, socket);
+  users.set(userId, ws);
 
-  // Send the user ID to the client
-  socket.emit('data', { type: 'user-id', userId });
+  ws.send(JSON.stringify({ type: 'user-id', userId }));
 
-  // Listen for messages from the client
-  socket.on('message', (message) => {
+  ws.on('message', (message) => {
     const data = JSON.parse(message);
     handleWebSocketMessage(userId, data);
   });
 
-  // Handle disconnection
-  socket.on('disconnect', () => {
+  ws.on('close', () => {
     users.delete(userId);
     broadcastUsers();
   });
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 function handleWebSocketMessage(userId, data) {
@@ -51,7 +43,6 @@ function handleWebSocketMessage(userId, data) {
     case 'ice-candidate':
       handleWebRTCMessage(userId, data);
       break;
-    // Handle other message types as needed
   }
 }
 
@@ -63,7 +54,7 @@ function handleMatchRequest(userId) {
     usersToConnect.forEach((user) => {
       const userSocket = users.get(user);
       if (userSocket) {
-        userSocket.emit('data', { type: 'match-found', users: usersToConnect });
+        userSocket.send(JSON.stringify({ type: 'match-found', users: usersToConnect }));
       }
     });
     broadcastUsers();
@@ -82,32 +73,31 @@ function handleWebRTCMessage(senderId, data) {
     const receiverSocket = users.get(receiverId);
 
     if (receiverSocket) {
-      receiverSocket.emit('data', {
+      receiverSocket.send(JSON.stringify({
         type: data.type,
         senderId: senderId,
         data: data.data,
-      });
+      }));
     }
   }
 }
 
 function getOtherUserId(userId, usersList) {
-  return usersList.find((user) => user !== userId);
+  return usersList.find(user => user !== userId);
 }
 
 function broadcastUsers() {
   const userList = Array.from(users.keys());
-  io.sockets.emit('data', { type: 'user-list', users: userList });
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: 'user-list', users: userList }));
+    }
+  });
 }
 
 function generateUserId() {
   return Math.random().toString(36).substring(2, 15);
 }
-
-// Additional route (optional)
-app.get('/', (req, res) => {
-  res.send('Hello, World!');
-});
 
 const PORT = process.env.PORT || 3000;
 
