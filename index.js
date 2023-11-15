@@ -25,10 +25,12 @@ app.use(express.static('public'));
 // Make sure to configure your server with an SSL certificate.
 // const wss = new WebSocket.Server({ server });
 
-wss.on('connection', (ws) => {
-  // Assign a unique user ID
-  const userId = generateUserId();
-  users.set(userId, ws);
+server.on('upgrade', (request, socket, head) => {
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    wss.emit('connection', ws, request);
+  });
+});
+
 
   // Send the user ID to the client
   ws.send(JSON.stringify({ type: 'user-id', userId }));
