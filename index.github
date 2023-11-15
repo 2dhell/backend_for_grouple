@@ -8,6 +8,23 @@ const wss = new WebSocket.Server({ server });
 
 const users = new Map();
 
+// 1. Error Handling for WebSocket and Server
+wss.on('error', (error) => {
+  console.error('WebSocket server error:', error);
+});
+
+server.on('error', (error) => {
+  console.error('Server error:', error);
+});
+
+// 2. Express Integration: Serve static files from a 'public' directory (optional)
+app.use(express.static('public'));
+
+// 3. Secure WebSocket Connection
+// If you're deploying over HTTPS, use wss (secure WebSocket)
+// Make sure to configure your server with an SSL certificate.
+// const wss = new WebSocket.Server({ server });
+
 wss.on('connection', (ws) => {
   // Assign a unique user ID
   const userId = generateUserId();
@@ -96,9 +113,20 @@ function generateUserId() {
   return Math.random().toString(36).substring(2, 15);
 }
 
+// 4. Environment Variable for WebSocket URL
+// Set the WEBSOCKET_URL environment variable before starting the server.
+// Example: WEBSOCKET_URL=wss://your-deployed-server.com node your-server-file.js
+const socket = new WebSocket(process.env.WEBSOCKET_URL || 'ws://localhost:3000');
+
+// Additional route (optional)
+app.get('/', (req, res) => {
+  res.send('Hello, World!');
+});
+
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
 
