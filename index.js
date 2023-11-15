@@ -1,46 +1,41 @@
 const express = require('express');
 const http = require('http');
-const WebSocket = require('ws');
+const socketIo = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const io = socketIo(server);
 
 const users = new Map();
 
-// 1. Error Handling for WebSocket and Server
-wss.on('error', (error) => {
-  console.error('WebSocket server error:', error);
+// Error Handling for Socket.io and Server
+io.on('error', (error) => {
+  console.error('Socket.io server error:', error);
 });
 
 server.on('error', (error) => {
   console.error('Server error:', error);
 });
 
-// 2. Express Integration: Serve static files from a 'public' directory (optional)
+// Serve static files from a 'public' directory (optional)
 app.use(express.static('public'));
 
-// 3. Secure WebSocket Connection
-// If you're deploying over HTTPS, use wss (secure WebSocket)
-// Make sure to configure your server with an SSL certificate.
-// const wss = new WebSocket.Server({ server });
-
-wss.on('connection', (ws) => {
+io.on('connection', (socket) => {
   // Assign a unique user ID
   const userId = generateUserId();
-  users.set(userId, ws);
+  users.set(userId, socket);
 
   // Send the user ID to the client
-  ws.send(JSON.stringify({ type: 'user-id', userId }));
+  socket.emit('data', { type: 'user-id', userId });
 
   // Listen for messages from the client
-  ws.on('message', (message) => {
+  socket.on('message', (message) => {
     const data = JSON.parse(message);
     handleWebSocketMessage(userId, data);
   });
 
   // Handle disconnection
-  ws.on('close', () => {
+  socket.on('disconnect', () => {
     users.delete(userId);
     broadcastUsers();
   });
@@ -67,8 +62,8 @@ function handleMatchRequest(userId) {
     const usersToConnect = [userId, matchedUserId];
     usersToConnect.forEach((user) => {
       const userSocket = users.get(user);
-      if (userSocket && userSocket.readyState === WebSocket.OPEN) {
-        userSocket.send(JSON.stringify({ type: 'match-found', users: usersToConnect }));
+      if (userSocket) {
+        userSocket.emit('data', { type: 'match-found', users: usersToConnect });
       }
     });
     broadcastUsers();
@@ -86,46 +81,32 @@ function handleWebRTCMessage(senderId, data) {
   if (receiverId) {
     const receiverSocket = users.get(receiverId);
 
-    if (receiverSocket && receiverSocket.readyState === WebSocket.OPEN) {
-      receiverSocket.send(JSON.stringify({
+    if (receiverSocket) {
+      receiverSocket.emit('data', {
         type: data.type,
         senderId: senderId,
         data: data.data,
-      }));
+      });
     }
   }
 }
 
 function getOtherUserId(userId, usersList) {
-  return usersList.find(user => user !== userId);
+  return usersList.find((user) => user !== userId);
 }
 
 function broadcastUsers() {
   const userList = Array.from(users.keys());
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'user-list', users: userList }));
-    }
-  });
+  io.sockets.emit('data', { type: 'user-list', users: userList });
 }
 
 function generateUserId() {
   return Math.random().toString(36).substring(2, 15);
 }
 
-// 4. Environment Variable for WebSocket URL
-// Set the WEBSOCKET_URL environment variable before starting the server.
-// Example: WEBSOCKET_URL=wss://your-deployed-server.com node your-server-file.js
-const socket = new WebSocket(process.env.WEBSOCKET_URL || 'ws://localhost:3000');
-
 // Additional route (optional)
 app.get('/', (req, res) => {
   res.send('Hello, World!');
-});
-
-// Close WebSocket connection on page unload
-window.addEventListener('beforeunload', () => {
-  socket.close();
 });
 
 const PORT = process.env.PORT || 3000;
