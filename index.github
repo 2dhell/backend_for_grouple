@@ -35,28 +35,55 @@ wss.on('connection', (ws) => {
 function handleWebSocketMessage(userId, data) {
   switch (data.type) {
     case 'match':
-      // Handle matchmaking logic here (e.g., pairing users)
-      const matchedUserId = findMatch(userId);
-      
-      if (matchedUserId) {
-        const usersToConnect = [userId, matchedUserId];
-        usersToConnect.forEach((user) => {
-          const userSocket = users.get(user);
-          if (userSocket) {
-            userSocket.send(JSON.stringify({ type: 'match-found', users: usersToConnect }));
-          }
-        });
-        broadcastUsers();
-      }
+      handleMatchRequest(userId);
+      break;
+    case 'offer':
+    case 'answer':
+    case 'ice-candidate':
+      handleWebRTCMessage(userId, data);
       break;
     // Handle other message types as needed
   }
 }
 
+function handleMatchRequest(userId) {
+  const matchedUserId = findMatch(userId);
+
+  if (matchedUserId) {
+    const usersToConnect = [userId, matchedUserId];
+    usersToConnect.forEach((user) => {
+      const userSocket = users.get(user);
+      if (userSocket) {
+        userSocket.send(JSON.stringify({ type: 'match-found', users: usersToConnect }));
+      }
+    });
+    broadcastUsers();
+  }
+}
+
 function findMatch(userId) {
-  // Basic example: Return a random user as a match
   const availableUsers = Array.from(users.keys()).filter((user) => user !== userId);
   return availableUsers[Math.floor(Math.random() * availableUsers.length)];
+}
+
+function handleWebRTCMessage(senderId, data) {
+  const receiverId = getOtherUserId(senderId, data.users);
+
+  if (receiverId) {
+    const receiverSocket = users.get(receiverId);
+
+    if (receiverSocket) {
+      receiverSocket.send(JSON.stringify({
+        type: data.type,
+        senderId: senderId,
+        data: data.data,
+      }));
+    }
+  }
+}
+
+function getOtherUserId(userId, usersList) {
+  return usersList.find(user => user !== userId);
 }
 
 function broadcastUsers() {
