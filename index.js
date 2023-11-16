@@ -30,8 +30,9 @@ wss.on('connection', (ws) => {
 });
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile('CODE/WEBSITES/index.html', { root: __dirname });
 });
+
 
 function handleWebSocketMessage(userId, data) {
   switch (data.type) {
