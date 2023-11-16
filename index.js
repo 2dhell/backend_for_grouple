@@ -1,38 +1,37 @@
 const express = require('express');
 const http = require('http');
-const WebSocket = require('ws');
+const socketIO = require('socket.io');
 const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const io = socketIO(server);
 
 const users = new Map();
 
 // Serve static files from the "public" directory
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
-wss.on('connection', (ws) => {
+io.on('connection', (socket) => {
   const userId = generateUserId();
-  users.set(userId, ws);
+  users.set(userId, socket);
 
-  ws.send(JSON.stringify({ type: 'user-id', userId }));
+  socket.emit('message', JSON.stringify({ type: 'user-id', userId }));
 
-  ws.on('message', (message) => {
+  socket.on('message', (message) => {
     const data = JSON.parse(message);
     handleWebSocketMessage(userId, data);
   });
 
-  ws.on('close', () => {
+  socket.on('disconnect', () => {
     users.delete(userId);
     broadcastUsers();
   });
 });
 
 app.get('/', (req, res) => {
-  res.sendFile('CODE/WEBSITES/index.html', { root: __dirname });
+  res.sendFile(path.join(__dirname, 'CODE/WEBSITES/index.html'));
 });
-
 
 function handleWebSocketMessage(userId, data) {
   switch (data.type) {
@@ -55,7 +54,7 @@ function handleMatchRequest(userId) {
     usersToConnect.forEach((user) => {
       const userSocket = users.get(user);
       if (userSocket) {
-        userSocket.send(JSON.stringify({ type: 'match-found', users: usersToConnect }));
+        userSocket.emit('message', JSON.stringify({ type: 'match-found', users: usersToConnect }));
       }
     });
     broadcastUsers();
@@ -74,7 +73,7 @@ function handleWebRTCMessage(senderId, data) {
     const receiverSocket = users.get(receiverId);
 
     if (receiverSocket) {
-      receiverSocket.send(JSON.stringify({
+      receiverSocket.emit('message', JSON.stringify({
         type: data.type,
         senderId: senderId,
         data: data.data,
@@ -89,11 +88,7 @@ function getOtherUserId(userId, usersList) {
 
 function broadcastUsers() {
   const userList = Array.from(users.keys());
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'user-list', users: userList }));
-    }
-  });
+  io.sockets.emit('message', JSON.stringify({ type: 'user-list', users: userList }));
 }
 
 function generateUserId() {
